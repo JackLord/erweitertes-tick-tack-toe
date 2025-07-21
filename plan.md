@@ -53,9 +53,20 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
      - Bei vorhandenem Token wird der Spieler direkt zur Lobby weitergeleitet.
      - Aus der Lobby kann man zurück zum Startmenü, um den Spielernamen zu ändern.
      - Token werden im localStorage des Browsers gespeichert.
+     - **Reconnection-Handling**: Bei Verbindungsabbruch versucht das Frontend automatisch eine Wiederverbindung:
+       - Nach erfolgreicher Reconnection wird der Spieler automatisch zum vorherigen Spiel-Zustand zurückgebracht
+       - Keine Umleitung zur Lobby wenn ein aktives Spiel existiert
+       - Token-basierte Authentifizierung gewährleistet nahtlose Wiederaufnahme
    * **Lobby**: Übersicht aller verfügbaren Spiele mit deren Status (wartend, laufend, voll). Möglichkeit zum Erstellen neuer Spiele oder Beitreten zu bestehenden.
    * **Spiel-Erstellungsscreen**: Konfiguration der Spielparameter (Field-Topologie, Activation-Mode, Scoring-Modi, Turn-Management, Win-Condition, Spielername, Symbol).
    * **Bereitschaftssystem**: Spieler können signalisieren, dass sie bereit sind zu starten. Das Spiel beginnt erst, wenn beide Spieler bereit sind.
+   * **Connection-Loss-Handling**: 
+     - Bei Verbindungsabbruch zeigt das Frontend automatisch eine Reconnection-Meldung
+     - Verbliebene Spieler erhalten eine Pause-Benachrichtigung mit Abbruch-Option
+     - **Pause-UI**: "Ein Spieler hat das Spiel verlassen. Warte bis er wieder eintritt oder beende das Spiel" 
+     - Abbruch-Button ermöglicht sofortiges Spielende ohne Warten
+     - Pause-Meldung verschwindet automatisch bei erfolgreicher Wiederverbindung des anderen Spielers
+     - **Reconnection-Flow**: Bei Wiederverbindung wird Spieler direkt zum Spiel zurückgebracht (keine Lobby-Umleitung)
    * Visuelles Highlighting und ein auffälliger **Partikeleffekt** unterstreichen jede bewertete Aktion – Art und Stärke des Effekts abhängig vom aktiven Scoring-Modus.
    * Anzeige von aktuellem Spieler, Punktestand, aktiven Modi und Spielfortschritt.
 
@@ -70,6 +81,9 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
      - Kommunikation mit dem Frontend erfolgt über Websockets.
      - **Mehrspiel-Verwaltung**: Server verwaltet mehrere Spiele über einfache Dictionaries und funktionale Ansätze.
      - **Session-Management**: Token-basierte Spieler-Authentifizierung über reine Funktionen.
+     - **Connection-Tracking**: Überwachung von WebSocket-Verbindungen und automatische Disconnect-Erkennung.
+     - **Pause/Resume-Logic**: Automatische Spielpause bei Disconnect, Wiederaufnahme bei Reconnection.
+     - **Timeout-Management**: Automatischer Spiel-Abbruch nach konfigurierbarer Wartezeit bei längerer Inaktivität.
      - **Modulares Plugin-System**: Verschiedene Spielmodi werden über ein Protocol + Enum Hybrid-System implementiert.
      - **Raum-basierte Websockets**: Jedes Spiel läuft in einem eigenen Socket.IO-Raum.
      - Endpunkte für den Start des Spiels und Bereitschaftsstatus.
@@ -77,6 +91,9 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
    * **Frontend**:
      - HTML-Seiten für Startmenü, Lobby, Spiel-Erstellung und Spielbrett mit Canvas-Element.
      - JavaScript für die Websocket-Kommunikation, Session-Management (localStorage), Lobby-Verwaltung und Darstellung des Spielfelds.
+     - **Connection-Management**: Automatische Reconnection-Versuche bei Verbindungsabbruch mit exponential backoff.
+     - **Pause-UI**: Dedicated UI-Komponenten für Disconnect-Benachrichtigungen und Spiel-Abbruch-Optionen.
+     - **State-Persistence**: Erhaltung des Spiel-Zustands während Reconnection ohne Lobby-Umleitung.
      - CSS für die Anpassung des Layouts und die Skalierung des Canvas.
      - **Canvas-Rendering**: Adaptives Rendering-System für verschiedene Spielfeld-Topologien und Graph-Strukturen.
      - **Responsive Design**: Automatische Anpassung an verschiedene Bildschirmgrößen und Spielfeld-Formen.
@@ -97,23 +114,107 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
        - `{ "action": "register_player", "player_name": "Alice" }`
        - `{ "action": "validate_token", "token": "abc123xyz" }`
        - `{ "action": "update_player_name", "token": "abc123xyz", "new_name": "Alice2" }`
-       - `{ "action": "create_game", "token": "abc123xyz", "game_config": {"field_variant": "rectangular_3x3", "activation_mode": "spiral", "scoring_modes": ["line_count"], "turn_mode": "alternating", "win_condition": "most_points", "symbol": "X"} }`
-       - `{ "action": "join_game", "token": "abc123xyz", "game_id": "abc123", "symbol": "O" }`
+       - `{ "action": "get_game_options" }`
+       - `{ "action": "list_open_games" }`
+       - `{ "action": "create_game", "token": "abc123xyz", "game_config": {"field_variant": "rectangular_3x3", "activation_mode": "spiral", "scoring_modes": ["line_count"], "turn_mode": "alternating", "win_condition": "most_points", "special_rules": []}, "player_info": {"name": "Alice", "symbol": "X"} }`
+       - `{ "action": "join_game", "token": "abc123xyz", "game_id": "abc123", "player_info": {"name": "Bob", "symbol": "O"} }`
        - `{ "action": "ready", "token": "abc123xyz", "game_id": "abc123" }`
-       - `{ "action": "move", "token": "abc123xyz", "game_id": "abc123", "position": [1, 2] }`
+       - `{ "action": "make_move", "token": "abc123xyz", "game_id": "abc123", "position": [1, 2] }`
+       - `{ "action": "reconnect", "token": "abc123xyz" }`
+       - `{ "action": "abort_game", "token": "abc123xyz", "game_id": "abc123" }`
      - Beispiel-Nachrichten vom Server:
        - `{ "type": "player_registered", "token": "abc123xyz", "player": {"name": "Alice"} }`
        - `{ "type": "token_valid", "player": {"name": "Alice"} }`
        - `{ "type": "token_invalid" }`
+       - `{ "type": "game_options_response", "options": {"field_variants": ["rectangular_3x3", "rectangular_4x4", "rectangular_5x5"], "activation_modes": ["spiral", "player_choice", "adjacent", "random"], "scoring_modes": ["line_count", "territory", "combo", "pattern"], "turn_modes": ["alternating", "double_turn", "time_pressure"], "win_conditions": ["most_points", "first_to_x", "territory_control"], "special_rules": ["capture", "time_based", "risk_reward"]} }`
+       - `{ "type": "open_games_list", "games": [{"game_id": "abc123", "creator": "Alice", "status": "waiting", "player_count": 1, "max_players": 2, "config": {...}}] }`
        - `{ "type": "lobby_update", "games": [...] }`
+       - `{ "type": "game_created", "game_id": "abc123", "creator": "Alice" }`
        - `{ "type": "game_joined", "game_id": "abc123", "players": [...] }`
        - `{ "type": "player_ready", "player": "Alice", "all_ready": false }`
-       - `{ "type": "game_started", "game_state": {...} }`
-       - `{ "type": "game_update", "grid": [...], "scores": {"Alice": 3, "Bob": 2}, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "game_phase": "playing" }`
+       - `{ "type": "game_started", "game_state": {"current_phase": "playing", "active_players": [...], "scores": {"Alice": 0, "Bob": 0}, "is_finished": false, "global_grid": {...}, "phase_data": {"current_player_index": 0}, "available_actions": ["make_move"], "active_modes": {...}} }`
+       - `{ "type": "update_game_state", "game_state": {"global_grid": {"subgrids": {...}, "subgrid_connections": {...}, "topology": "rectangular", "active_subgrid_pos": "1,1"}, "current_phase": "playing", "active_players": [{"name": "Alice", "symbol": "X", "is_ready": true, "is_connected": true}, {"name": "Bob", "symbol": "O", "is_ready": true, "is_connected": true}], "phase_data": {"current_player_index": 0}, "available_actions": ["make_move"], "scores": {"Alice": 3, "Bob": 2}, "is_finished": false, "disconnected_players": [], "pause_timestamp": null, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "last_move": {"player": "Bob", "position": [1, 2], "timestamp": "2023-12-01T10:30:00Z"}} }`
+       - `{ "type": "invalid_move", "reason": "cell_already_occupied", "details": "The selected cell at position [1, 2] is already occupied by player Alice" }`
+       - `{ "type": "player_disconnected", "player": "Bob", "game_id": "abc123", "message": "Ein Spieler hat das Spiel verlassen. Warte bis er wieder eintritt oder beende das Spiel." }`
+       - `{ "type": "game_paused", "game_id": "abc123", "disconnected_player": "Bob", "can_abort": true }`
+       - `{ "type": "player_reconnected", "player": "Bob", "game_id": "abc123" }`
+       - `{ "type": "game_resumed", "game_id": "abc123", "game_state": {"current_phase": "playing", "active_players": [...], "scores": {"Alice": 3, "Bob": 2}, "is_finished": false, "disconnected_players": [], "pause_timestamp": null, "active_modes": {...}, "last_move": {...}} }`
+       - `{ "type": "game_aborted", "game_id": "abc123", "aborted_by": "Alice", "reason": "player_disconnect" }`
+       - `{ "type": "reconnection_success", "game_id": "abc123", "game_state": {"current_phase": "playing", "active_players": [...], "scores": {"Alice": 3, "Bob": 2}, "is_finished": false, "disconnected_players": [], "pause_timestamp": null, "active_modes": {...}, "last_move": {...}} }`
+       - `{ "type": "error", "message": "Invalid action or game state" }`
+
+   * **Spielzug-Validierung und Zustandsaktualierung**:
+     - **Move-Validierung**: Wenn das Backend eine `make_move`-Nachricht erhält, validiert es:
+       - Ist der Spieler an der Reihe (gemäß `phase_data.current_player_index` und `active_players`-Liste)?
+       - Ist die angegebene Position gültig und innerhalb des aktiven Teilfelds (`global_grid.active_subgrid_pos`)?
+       - Ist die Zelle frei (nicht bereits von einem anderen Spieler belegt)?
+       - Entspricht der Zug den aktuellen Spielregeln und `special_rules` aus der `GameConfig`?
+     - **Gültiger Zug**: Nach erfolgreicher Validierung wird der neue `GameState` berechnet:
+       - Die Zelle wird mit dem Spielersymbol markiert (serverseitige Logik bestimmt Cell-Zustand)
+       - **Cell-State-Berechnung**: Das Backend aktualisiert `Cell.player` und `Cell.properties`
+         - Grundzustand: `Cell.player` wird auf den aktuellen Spieler gesetzt
+         - Special-Rules können zusätzliche Properties setzen (z.B. für Capture-Modi)
+         - Nachbarschafts-Updates für graph-basierte Spielfelder werden angewendet
+       - Scoring-Modi bewerten den Zug und aktualisieren die `scores` (Dict[str, int]) mit Spielernamen als Schlüssel
+       - Activation-Modi bestimmen das nächste aktive Teilfeld (`global_grid.active_subgrid_pos`)
+       - Turn-Management aktualisiert `phase_data.current_player_index` für den nächsten Spieler
+       - Win-Conditions prüfen auf Spielende und setzen `is_finished` entsprechend
+     - **State-Update**: Eine `update_game_state`-Nachricht wird an alle Spieler des Spiels gesendet mit:
+       - Vollständigem neuen `GameState` (inkl. `global_grid`, `scores`, `current_phase`, `active_players`, etc.)
+       - Aktualisiertem `phase_data` mit dem nächsten Spieler-Index
+       - Details zum letzten Zug in `last_move` (Spieler, Position, Zeitstempel)
+       - Aktualisierten `active_modes` mit Informationen über Scoring-Events und Punkte-Änderungen
+     - **Ungültiger Zug**: Bei Validierungsfehlern wird eine `invalid_move`-Nachricht nur an den sendenden Spieler geschickt mit:
+       - Spezifischem Fehlergrund (`reason`: "not_your_turn", "cell_occupied", "invalid_position", "game_not_active")
+       - Detaillierter Beschreibung des Fehlers (`details`)
+
+   * **Verbindungsabbruch und Spielpause**:
+     - **Disconnect-Erkennung**: Der Server erkennt Verbindungsabbrüche über WebSocket-Disconnect-Events
+     - **Automatische Spielpause**: Bei Disconnect eines Spielers während eines laufenden Spiels:
+       - Spielstatus wird auf "paused" gesetzt
+       - Verbliebene Spieler erhalten `player_disconnected` und `game_paused` Nachrichten
+       - Pause-Nachricht enthält Option zum Spiel-Abbruch (`can_abort: true`)
+       - Spielzüge werden während der Pause nicht akzeptiert
+     - **Reconnection-Handling**: Bei Wiederverbindung eines disconnected Spielers:
+       - Server validiert Token und stellt Spielzustand wieder her
+       - `reconnect`-Action führt zu automatischer Spiel-Wiederaufnahme
+       - Alle Spieler erhalten `player_reconnected` und `game_resumed` Nachrichten
+       - Spielstatus wechselt zurück zu "running"
+     - **Spiel-Abbruch**: Verbliebene Spieler können wartende Spiele über `abort_game` beenden:
+       - Spiel wird als "aborted" markiert und beendet
+       - Alle Clients erhalten `game_aborted` Nachricht
+       - Spieler werden zur Lobby zurückgeleitet
+     - **Zeitbasierte Timeouts**: Nach konfigurierter Zeit (z.B. 5 Minuten) wird pausiertes Spiel automatisch abgebrochen
+
+   * **Spieler- und Sitzungsverwaltung**:
+     - **Spiel-Erstellung**: Die `create_game`-Nachricht enthält sowohl `game_config` als auch `player_info`
+       - Der Ersteller wird automatisch als erster Spieler dem Spiel hinzugefügt
+       - Das Spiel erhält den Status "waiting" und wartet auf weitere Spieler
+     - **Spiel-Beitritt**: Spieler können über `join_game` bestehenden Spielen beitreten
+       - Validation erfolgt auf verfügbare Plätze und Spielstatus
+       - Alle Spieler des Spiels erhalten eine `game_joined`-Nachricht mit aktualisierter Spielerliste
+     - **Lobby-Management**: 
+       - `list_open_games` gibt alle Spiele im Status "waiting" zurück
+       - `lobby_update`-Nachrichten informieren über Änderungen in verfügbaren Spielen
+       - Spiele werden automatisch aus der Lobby entfernt wenn sie voll oder gestartet sind
+     - **Automatische Updates**: Jede Änderung an Spielern (Beitritt, Bereitschaft, Verlassen) triggert Updates an alle betroffenen Clients
+     - **Disconnect-Management**: 
+       - Server verfolgt `is_connected`-Status aller Spieler in `active_players`-Liste
+       - Bei Disconnect wird entsprechender Spieler zu `disconnected_players` hinzugefügt und `pause_timestamp` gesetzt
+       - Automatische Pause bei Disconnect, Wiederaufnahme bei Reconnect durch Zurücksetzen von `pause_timestamp`
+       - Spieler können via Token nahtlos zu unterbrochenen Spielen zurückkehren
+       - Timeout-basierter Spiel-Abbruch bei längerer Inaktivität basierend auf `pause_timestamp`
 
 8. **Modulare Architektur & Erweiterbarkeit**
 
    * **Grundprinzip**: Das System wird als flexibles, graph-basiertes Framework konzipiert, das verschiedene Spielvarianten ohne Kern-Refactoring ermöglicht.
+
+   * **Dynamische Spielkonfiguration**: 
+     - Das Frontend fragt über `get_game_options` die verfügbaren Module vom Backend ab
+     - Das Backend antwortet mit `game_options_response` und Listen aller verfügbaren Optionen
+     - Dies ermöglicht wahre Modularität: Neue Module werden automatisch im Frontend verfügbar
+     - Keine Hard-Codierung von Optionen im Frontend - alles wird dynamisch geladen
+     - Kompatibilitätsvalidierung erfolgt serverseitig basierend auf verfügbaren Modulen
 
    * **Graph-basierte Spielfeld-Modellierung**:
      - **Cell-Dataclass**: `id` (str), `player` (Optional[Player]), `coordinates` (Tuple), `neighbors` (List[str]), `properties` (Dict)
@@ -166,6 +267,7 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
      - Flask-App mit Websocket-Unterstützung (z. B. über Flask-SocketIO).
      - **Mehrspiel-Verwaltung**: Server verwaltet mehrere Spiele über einfache Dictionaries und funktionale Ansätze.
      - **Session-Management**: Token-basierte Spieler-Authentifizierung über reine Funktionen.
+     - **Connection-Management**: Tracking von WebSocket-Verbindungen pro Spieler und Spiel.
      - **Lobby-System**: Endpunkte nutzen funktionale Module für das Erstellen, Auflisten und Beitreten zu Spielen.
      - **Raum-basierte Websockets**: Jedes Spiel läuft in einem eigenen Socket.IO-Raum.
      - Endpunkte für den Start des Spiels und Bereitschaftsstatus.
@@ -173,21 +275,23 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
    * **Frontend**:
      - HTML-Seiten für Startmenü, Lobby, Spiel-Erstellung und Spielbrett mit Canvas-Element.
      - JavaScript für die Websocket-Kommunikation, Session-Management (localStorage), Lobby-Verwaltung und Darstellung des Spielfelds.
+     - **Reconnection-Logic**: Automatische Wiederverbindung mit Token-basierter Session-Wiederherstellung.
+     - **Pause-UI-Management**: Handling von Disconnect-Benachrichtigungen und Abbruch-Optionen.
      - CSS für die Anpassung des Layouts und die Skalierung des Canvas.
    * **Kern-Dataclasses**:
      - Verwendung von Python-Dataclasses (@dataclass) für saubere Objektdefinitionen ohne Methoden.
-     - **Player-Dataclass**: Speichert `name` (str), `symbol` (str), `token` (str) und `is_ready` (bool).
+     - **Player-Dataclass**: Speichert `name` (str), `symbol` (str), `token` (str), `is_ready` (bool) und `is_connected` (bool).
      - **Cell-Dataclass**: Speichert `id` (str), `player` (Optional[Player]), `coordinates` (Tuple), `neighbors` (List[str]), `properties` (Dict).
      - **SubGrid-Dataclass**: Enthält `id` (str), `cells` (Dict[str, Cell]), `shape_definition` (Dict), `is_closed` (bool), `properties` (Dict).
      - **GlobalGrid-Dataclass**: Enthält `subgrids` (Dict[str, SubGrid]), `subgrid_connections` (Dict[str, List[str]]), `topology` (str), `active_subgrid_pos` (Optional[str]).
      - **GameEvent-Dataclass**: `type` (str), `player` (Player), `data` (Dict[str, Any]), `timestamp` (datetime).
-     - **GameState-Dataclass**: Zentrale Spielverwaltung mit `global_grid` (GlobalGrid), `current_phase` (str), `active_players` (List[Player]), `phase_data` (Dict), `available_actions` (List[str]), `scores` (Dict[Player, int]), `is_finished` (bool).
+     - **GameState-Dataclass**: Zentrale Spielverwaltung mit `global_grid` (GlobalGrid), `current_phase` (str), `active_players` (List[Player]), `phase_data` (Dict), `available_actions` (List[str]), `scores` (Dict[str, int]), `is_finished` (bool), `disconnected_players` (List[Player]), `pause_timestamp` (Optional[datetime]), `active_modes` (Dict[str, Any]) und `last_move` (Optional[Dict]).
      - **GameConfig-Dataclass**: `field_variant` (str), `activation_mode` (str), `scoring_modes` (List[str]), `turn_mode` (str), `win_condition` (str), `special_rules` (List[str]).
-     - **Game-Dataclass**: Verwaltet ein einzelnes Spiel mit `game_id` (str), `config` (GameConfig), `game_state` (GameState), `status` (str: "waiting", "ready", "running", "finished"), `created_at` (datetime).
+     - **Game-Dataclass**: Verwaltet ein einzelnes Spiel mit `game_id` (str), `config` (GameConfig), `game_state` (GameState), `status` (str: "waiting", "ready", "running", "paused", "finished", "aborted"), `created_at` (datetime) und `last_activity` (datetime).
      - **Funktionale Architektur**: 
-       - `player_functions.py`: Funktionen für Spieler-Registrierung, Token-Validierung, Namensänderung.
-       - `game_functions.py`: Funktionen für Spiel-Erstellung, Beitreten, Züge, Event-Verarbeitung.
-       - `lobby_functions.py`: Funktionen für Lobby-Verwaltung, Spiel-Auflistung.
+       - `player_functions.py`: Funktionen für Spieler-Registrierung, Token-Validierung, Namensänderung, Connection-Status-Management.
+       - `game_functions.py`: Funktionen für Spiel-Erstellung, Beitreten, Züge, Event-Verarbeitung, Pause/Resume-Logic.
+       - `lobby_functions.py`: Funktionen für Lobby-Verwaltung, Spiel-Auflistung, Disconnect-Cleanup.
        - `scoring_modules/`: Verschiedene Scoring-Strategien als Protocol-implementierende Module.
        - `activation_modules/`: Verschiedene Aktivierungs-Strategien für Teilfelder.
        - `turn_modules/`: Verschiedene Turn-Management-Strategien.
@@ -204,11 +308,14 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
    * Entwicklung der State Machine für flexibles Turn-Management.
    * Implementierung der funktionalen Module (player_functions, game_functions, lobby_functions).
    * Entwicklung der Standard-Modi-Module (scoring, activation, turn, win_condition).
-   * Entwicklung des Session-Managements über reine Funktionen mit Token-basierter Authentifizierung.
+   * Entwicklung des Session-Managements über reine Funktionen mit Token-basierter Authentifizierung und Reconnection-Handling.
+   * Implementierung des Disconnect/Reconnect-Systems mit automatischer Spielpause und Wiederaufnahme.
    * Implementierung des Lobby-Systems und der Spiel-Erstellung mit modularer Konfiguration.
    * Entwicklung des Bereitschaftssystems für Spieler.
    * Erstellung der Frontend-Screens mit localStorage-Integration für Token-Verwaltung.
-   * Implementierung der raum-basierten Websocket-Kommunikation.
+   * Implementierung der raum-basierten Websocket-Kommunikation mit Connection-Tracking.
+   * Entwicklung der Disconnect/Reconnect-Behandlung mit automatischer Pause-Logic und Timeout-Management.
+   * Implementierung der Frontend-Reconnection-Logic mit State-Persistence und Pause-UI.
    * Entwicklung der Canvas-basierten Spielfeld-Darstellung mit dynamischer Skalierung für verschiedene Topologien und Graph-Strukturen.
    * Implementierung der serverseitigen Logik für die Validierung und Abwicklung von Spielzügen über reine Funktionen.
    * Entwicklung eines Konfigurations-Validators für Spielmodus-Kompatibilität.
