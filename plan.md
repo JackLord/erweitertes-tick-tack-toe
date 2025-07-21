@@ -97,23 +97,74 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
        - `{ "action": "register_player", "player_name": "Alice" }`
        - `{ "action": "validate_token", "token": "abc123xyz" }`
        - `{ "action": "update_player_name", "token": "abc123xyz", "new_name": "Alice2" }`
-       - `{ "action": "create_game", "token": "abc123xyz", "game_config": {"field_variant": "rectangular_3x3", "activation_mode": "spiral", "scoring_modes": ["line_count"], "turn_mode": "alternating", "win_condition": "most_points", "symbol": "X"} }`
-       - `{ "action": "join_game", "token": "abc123xyz", "game_id": "abc123", "symbol": "O" }`
+       - `{ "action": "get_game_options" }`
+       - `{ "action": "list_open_games" }`
+       - `{ "action": "create_game", "token": "abc123xyz", "game_config": {"field_variant": "rectangular_3x3", "activation_mode": "spiral", "scoring_modes": ["line_count"], "turn_mode": "alternating", "win_condition": "most_points", "special_rules": []}, "player_info": {"name": "Alice", "symbol": "X"} }`
+       - `{ "action": "join_game", "token": "abc123xyz", "game_id": "abc123", "player_info": {"name": "Bob", "symbol": "O"} }`
        - `{ "action": "ready", "token": "abc123xyz", "game_id": "abc123" }`
-       - `{ "action": "move", "token": "abc123xyz", "game_id": "abc123", "position": [1, 2] }`
+       - `{ "action": "make_move", "token": "abc123xyz", "game_id": "abc123", "position": [1, 2] }`
      - Beispiel-Nachrichten vom Server:
        - `{ "type": "player_registered", "token": "abc123xyz", "player": {"name": "Alice"} }`
        - `{ "type": "token_valid", "player": {"name": "Alice"} }`
        - `{ "type": "token_invalid" }`
+       - `{ "type": "game_options_response", "options": {"field_variants": ["rectangular_3x3", "rectangular_4x4", "rectangular_5x5"], "activation_modes": ["spiral", "player_choice", "adjacent", "random"], "scoring_modes": ["line_count", "territory", "combo", "pattern"], "turn_modes": ["alternating", "double_turn", "time_pressure"], "win_conditions": ["most_points", "first_to_x", "territory_control"], "special_rules": ["capture", "time_based", "risk_reward"]} }`
+       - `{ "type": "open_games_list", "games": [{"game_id": "abc123", "creator": "Alice", "status": "waiting", "player_count": 1, "max_players": 2, "config": {...}}] }`
        - `{ "type": "lobby_update", "games": [...] }`
+       - `{ "type": "game_created", "game_id": "abc123", "creator": "Alice" }`
        - `{ "type": "game_joined", "game_id": "abc123", "players": [...] }`
        - `{ "type": "player_ready", "player": "Alice", "all_ready": false }`
        - `{ "type": "game_started", "game_state": {...} }`
-       - `{ "type": "game_update", "grid": [...], "scores": {"Alice": 3, "Bob": 2}, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "game_phase": "playing" }`
+       - `{ "type": "update_game_state", "game_state": {"global_grid": {...}, "current_player": "Alice", "scores": {"Alice": 3, "Bob": 2}, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "game_phase": "playing", "is_finished": false, "last_move": {"player": "Bob", "position": [1, 2], "timestamp": "2023-..."}} }`
+       - `{ "type": "invalid_move", "reason": "cell_already_occupied", "details": "The selected cell at position [1, 2] is already occupied by player Alice" }`
+       - `{ "type": "error", "message": "Invalid action or game state" }`
+
+   * **Spielzug-Validierung und Zustandsaktualierung**:
+     - **Move-Validierung**: Wenn das Backend eine `make_move`-Nachricht erhält, validiert es:
+       - Ist der Spieler an der Reihe (gemäß aktuellem `turn_mode`)?
+       - Ist die angegebene Position gültig und innerhalb des aktiven Teilfelds?
+       - Ist die Zelle frei (nicht bereits von einem anderen Spieler belegt)?
+       - Entspricht der Zug den aktuellen Spielregeln und `special_rules`?
+     - **Gültiger Zug**: Nach erfolgreicher Validierung wird der neue `GameState` berechnet:
+       - Die Zelle wird mit dem Spielersymbol markiert (serverseitige Logik bestimmt Cell-Zustand)
+       - **Cell-State-Berechnung**: Das Backend aktualisiert `Cell.player` und `Cell.properties`
+         - Grundzustand: `Cell.player` wird auf den aktuellen Spieler gesetzt
+         - Special-Rules können zusätzliche Properties setzen (z.B. für Capture-Modi)
+         - Nachbarschafts-Updates für graph-basierte Spielfelder werden angewendet
+       - Scoring-Modi bewerten den Zug und aktualisieren Punktestände
+       - Activation-Modi bestimmen das nächste aktive Teilfeld
+       - Turn-Management bestimmt den nächsten Spieler
+       - Win-Conditions prüfen auf Spielende
+     - **State-Update**: Eine `update_game_state`-Nachricht wird an alle Spieler des Spiels gesendet mit:
+       - Vollständigem neuen `GameState` (Grid, Scores, aktiver Spieler, etc.)
+       - Details zum letzten Zug (Spieler, Position, Zeitstempel)
+       - Informationen über Scoring-Events und Punkte-Änderungen
+     - **Ungültiger Zug**: Bei Validierungsfehlern wird eine `invalid_move`-Nachricht nur an den sendenden Spieler geschickt mit:
+       - Spezifischem Fehlergrund (`reason`: "not_your_turn", "cell_occupied", "invalid_position", "game_not_active")
+       - Detaillierter Beschreibung des Fehlers (`details`)
+
+   * **Spieler- und Sitzungsverwaltung**:
+     - **Spiel-Erstellung**: Die `create_game`-Nachricht enthält sowohl `game_config` als auch `player_info`
+       - Der Ersteller wird automatisch als erster Spieler dem Spiel hinzugefügt
+       - Das Spiel erhält den Status "waiting" und wartet auf weitere Spieler
+     - **Spiel-Beitritt**: Spieler können über `join_game` bestehenden Spielen beitreten
+       - Validation erfolgt auf verfügbare Plätze und Spielstatus
+       - Alle Spieler des Spiels erhalten eine `game_joined`-Nachricht mit aktualisierter Spielerliste
+     - **Lobby-Management**: 
+       - `list_open_games` gibt alle Spiele im Status "waiting" zurück
+       - `lobby_update`-Nachrichten informieren über Änderungen in verfügbaren Spielen
+       - Spiele werden automatisch aus der Lobby entfernt wenn sie voll oder gestartet sind
+     - **Automatische Updates**: Jede Änderung an Spielern (Beitritt, Bereitschaft, Verlassen) triggert Updates an alle betroffenen Clients
 
 8. **Modulare Architektur & Erweiterbarkeit**
 
    * **Grundprinzip**: Das System wird als flexibles, graph-basiertes Framework konzipiert, das verschiedene Spielvarianten ohne Kern-Refactoring ermöglicht.
+
+   * **Dynamische Spielkonfiguration**: 
+     - Das Frontend fragt über `get_game_options` die verfügbaren Module vom Backend ab
+     - Das Backend antwortet mit `game_options_response` und Listen aller verfügbaren Optionen
+     - Dies ermöglicht wahre Modularität: Neue Module werden automatisch im Frontend verfügbar
+     - Keine Hard-Codierung von Optionen im Frontend - alles wird dynamisch geladen
+     - Kompatibilitätsvalidierung erfolgt serverseitig basierend auf verfügbaren Modulen
 
    * **Graph-basierte Spielfeld-Modellierung**:
      - **Cell-Dataclass**: `id` (str), `player` (Optional[Player]), `coordinates` (Tuple), `neighbors` (List[str]), `properties` (Dict)
