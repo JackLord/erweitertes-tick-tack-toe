@@ -1,8 +1,4 @@
-**Modulares Tic-Tac-Toe Game Framework**
-
-Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte Tic-Tac-Toe-Varianten zu erstellen und zu spielen. Das System kombiniert klassische Teilfelder zu größeren Spielfeldern und bietet durch modulare Komponenten unendliche Variationsmöglichkeiten in Scoring, Aktivierung, Turn-Management und Win-Conditions.
-
-1. **Framework-Konzept**
+**Mo1. **Framework-Konzept**
 
    * **Modulare Architektur**: Verschiedene Spielkomponenten (Scoring, Aktivierung, Turn-Management, Win-Conditions) sind austauschbar und kombinierbar.
    * **Graph-basierte Spielfelder**: Unterstützt verschiedene Topologien (rechteckig, hexagonal, custom) durch flexible Nachbarschafts-Definitionen.
@@ -35,7 +31,27 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
    * **Field-Topologien**: 
      - Rectangular (Standard), Hexagonal, Torus, Custom-Graph-Strukturen
      - Verschiedene Spielfeld-Layouts und Nachbarschafts-Regeln
-   * **Kombinierbarkeit**: Modi können je nach Kompatibilität kombiniert und gewichtet werden.
+   * **Kombinierbarkeit**: Modi können je nach Kompatibilität kombiniert und gewichtet werden.oe Game Framework**
+
+Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte Tic-Tac-Toe-Varianten zu erstellen und zu spielen. Das System kombiniert klassische Teilfelder zu größeren Spielfeldern und bietet durch modulare Komponenten unendliche Variationsmöglichkeiten in Scoring, Aktivierung, Turn-Management und Win-Conditions.
+
+1. **Aufbau**
+
+   * Beim Start wählt man die Anzahl der Teilfelder pro Seite (1 × 1 bis 5 × 5).
+   * Jedes Teilfeld ist selbst ein normales 3 × 3-Tic-Tac-Toe-Brett.
+   * Alle Teilfelder zusammen ergeben ein „globales“ Raster von *(Teilfelder × 3)* Zellen pro Seite.
+
+2. **Spielablauf**
+
+   * Zwei Spieler setzen abwechselnd in das gerade **aktive** Teilfeld.
+   * Die Teilfelder werden nacheinander in **Spiralreihenfolge** freigeschaltet; alle anderen Felder sind solange gesperrt.
+   * Ein Teilfeld schließt sich, sobald alle neun Zellen belegt sind, und das nächste Teilfeld wird aktiv.
+
+3. **Punktsystem**
+
+   * Nach jedem Zug prüft das Spiel das **gesamte** globale Raster.
+   * Für jede neu entstandene durchgehende Linie von mindestens drei gleichen Symbolen (horizontal, vertikal oder diagonal) erhält der aktuelle Spieler **einen Punkt**.
+   * Mehrere Linien in einem Zug bringen entsprechend mehrere Punkte.
 
 4. **Framework-Flexibilität & Beispiel-Konfigurationen**
 
@@ -63,10 +79,10 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
 
    * **KISS-Prinzip**: Die Anwendung bleibt einfach und übersichtlich, ohne unnötige Komplexität.
    * **Modulare Erweiterbarkeit**: Das System wird von Grund auf so konzipiert, dass es iterativ erweitert werden kann, ohne große Refactorings oder Tricks anwenden zu müssen. Dieses umfangreiche Dokument dient als Fundament für zukünftige Erweiterungen.
-   * **Lokal**: Das Framework läuft in einem lokalen Netzwerk und benötigt keine Internetverbindung.
+   * **Lokal**: Das Spiel läuft in einem lokalen Netzwerk und benötigt keine Internetverbindung.
    * **Backend**:
      - Implementierung mit Python und Flask.
-     - Die gesamte Framework-Logik, einschließlich der Validierung von Spielzügen, wird serverseitig abgewickelt.
+     - Die gesamte Spiel-Logik, einschließlich der Validierung von Spielzügen, wird serverseitig abgewickelt.
      - Kommunikation mit dem Frontend erfolgt über Websockets.
      - **Mehrspiel-Verwaltung**: Server verwaltet mehrere Spiele über einfache Dictionaries und funktionale Ansätze.
      - **Session-Management**: Token-basierte Spieler-Authentifizierung über reine Funktionen.
@@ -159,6 +175,8 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
      - **Turn-Management**: Alternating, Double-Turn, Auction, Time-Pressure, Simultaneous
      - **Win-Conditions**: Most-Points, First-To-X, Elimination, Territory-Control, Pattern-Complete
      - **Field-Variants**: Different sizes, topologies (including future hexagonal, torus, etc.)
+
+9. **Datenmodell-Details**
 
 9. **Datenmodell-Details**
 
