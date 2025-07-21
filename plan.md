@@ -132,37 +132,38 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
        - `{ "type": "game_created", "game_id": "abc123", "creator": "Alice" }`
        - `{ "type": "game_joined", "game_id": "abc123", "players": [...] }`
        - `{ "type": "player_ready", "player": "Alice", "all_ready": false }`
-       - `{ "type": "game_started", "game_state": {...} }`
-       - `{ "type": "update_game_state", "game_state": {"global_grid": {...}, "current_player": "Alice", "scores": {"Alice": 3, "Bob": 2}, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "game_phase": "playing", "is_finished": false, "last_move": {"player": "Bob", "position": [1, 2], "timestamp": "2023-..."}} }`
+       - `{ "type": "game_started", "game_state": {"current_phase": "playing", "active_players": [...], "scores": {"Alice": 0, "Bob": 0}, "is_finished": false, "global_grid": {...}, "phase_data": {"current_player_index": 0}, "available_actions": ["make_move"], "active_modes": {...}} }`
+       - `{ "type": "update_game_state", "game_state": {"global_grid": {"subgrids": {...}, "subgrid_connections": {...}, "topology": "rectangular", "active_subgrid_pos": "1,1"}, "current_phase": "playing", "active_players": [{"name": "Alice", "symbol": "X", "is_ready": true, "is_connected": true}, {"name": "Bob", "symbol": "O", "is_ready": true, "is_connected": true}], "phase_data": {"current_player_index": 0}, "available_actions": ["make_move"], "scores": {"Alice": 3, "Bob": 2}, "is_finished": false, "disconnected_players": [], "pause_timestamp": null, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "last_move": {"player": "Bob", "position": [1, 2], "timestamp": "2023-12-01T10:30:00Z"}} }`
        - `{ "type": "invalid_move", "reason": "cell_already_occupied", "details": "The selected cell at position [1, 2] is already occupied by player Alice" }`
        - `{ "type": "player_disconnected", "player": "Bob", "game_id": "abc123", "message": "Ein Spieler hat das Spiel verlassen. Warte bis er wieder eintritt oder beende das Spiel." }`
        - `{ "type": "game_paused", "game_id": "abc123", "disconnected_player": "Bob", "can_abort": true }`
        - `{ "type": "player_reconnected", "player": "Bob", "game_id": "abc123" }`
-       - `{ "type": "game_resumed", "game_id": "abc123", "game_state": {...} }`
+       - `{ "type": "game_resumed", "game_id": "abc123", "game_state": {"current_phase": "playing", "active_players": [...], "scores": {"Alice": 3, "Bob": 2}, "is_finished": false, "disconnected_players": [], "pause_timestamp": null, "active_modes": {...}, "last_move": {...}} }`
        - `{ "type": "game_aborted", "game_id": "abc123", "aborted_by": "Alice", "reason": "player_disconnect" }`
-       - `{ "type": "reconnection_success", "game_id": "abc123", "game_state": {...} }`
+       - `{ "type": "reconnection_success", "game_id": "abc123", "game_state": {"current_phase": "playing", "active_players": [...], "scores": {"Alice": 3, "Bob": 2}, "is_finished": false, "disconnected_players": [], "pause_timestamp": null, "active_modes": {...}, "last_move": {...}} }`
        - `{ "type": "error", "message": "Invalid action or game state" }`
 
    * **Spielzug-Validierung und Zustandsaktualierung**:
      - **Move-Validierung**: Wenn das Backend eine `make_move`-Nachricht erhält, validiert es:
-       - Ist der Spieler an der Reihe (gemäß aktuellem `turn_mode`)?
-       - Ist die angegebene Position gültig und innerhalb des aktiven Teilfelds?
+       - Ist der Spieler an der Reihe (gemäß `phase_data.current_player_index` und `active_players`-Liste)?
+       - Ist die angegebene Position gültig und innerhalb des aktiven Teilfelds (`global_grid.active_subgrid_pos`)?
        - Ist die Zelle frei (nicht bereits von einem anderen Spieler belegt)?
-       - Entspricht der Zug den aktuellen Spielregeln und `special_rules`?
+       - Entspricht der Zug den aktuellen Spielregeln und `special_rules` aus der `GameConfig`?
      - **Gültiger Zug**: Nach erfolgreicher Validierung wird der neue `GameState` berechnet:
        - Die Zelle wird mit dem Spielersymbol markiert (serverseitige Logik bestimmt Cell-Zustand)
        - **Cell-State-Berechnung**: Das Backend aktualisiert `Cell.player` und `Cell.properties`
          - Grundzustand: `Cell.player` wird auf den aktuellen Spieler gesetzt
          - Special-Rules können zusätzliche Properties setzen (z.B. für Capture-Modi)
          - Nachbarschafts-Updates für graph-basierte Spielfelder werden angewendet
-       - Scoring-Modi bewerten den Zug und aktualisieren Punktestände
-       - Activation-Modi bestimmen das nächste aktive Teilfeld
-       - Turn-Management bestimmt den nächsten Spieler
-       - Win-Conditions prüfen auf Spielende
+       - Scoring-Modi bewerten den Zug und aktualisieren die `scores` (Dict[str, int]) mit Spielernamen als Schlüssel
+       - Activation-Modi bestimmen das nächste aktive Teilfeld (`global_grid.active_subgrid_pos`)
+       - Turn-Management aktualisiert `phase_data.current_player_index` für den nächsten Spieler
+       - Win-Conditions prüfen auf Spielende und setzen `is_finished` entsprechend
      - **State-Update**: Eine `update_game_state`-Nachricht wird an alle Spieler des Spiels gesendet mit:
-       - Vollständigem neuen `GameState` (Grid, Scores, aktiver Spieler, etc.)
-       - Details zum letzten Zug (Spieler, Position, Zeitstempel)
-       - Informationen über Scoring-Events und Punkte-Änderungen
+       - Vollständigem neuen `GameState` (inkl. `global_grid`, `scores`, `current_phase`, `active_players`, etc.)
+       - Aktualisiertem `phase_data` mit dem nächsten Spieler-Index
+       - Details zum letzten Zug in `last_move` (Spieler, Position, Zeitstempel)
+       - Aktualisierten `active_modes` mit Informationen über Scoring-Events und Punkte-Änderungen
      - **Ungültiger Zug**: Bei Validierungsfehlern wird eine `invalid_move`-Nachricht nur an den sendenden Spieler geschickt mit:
        - Spezifischem Fehlergrund (`reason`: "not_your_turn", "cell_occupied", "invalid_position", "game_not_active")
        - Detaillierter Beschreibung des Fehlers (`details`)
@@ -198,10 +199,11 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
        - Spiele werden automatisch aus der Lobby entfernt wenn sie voll oder gestartet sind
      - **Automatische Updates**: Jede Änderung an Spielern (Beitritt, Bereitschaft, Verlassen) triggert Updates an alle betroffenen Clients
      - **Disconnect-Management**: 
-       - Server verfolgt Connection-Status aller Spieler in aktiven Spielen
-       - Automatische Pause bei Disconnect, Wiederaufnahme bei Reconnect
+       - Server verfolgt `is_connected`-Status aller Spieler in `active_players`-Liste
+       - Bei Disconnect wird entsprechender Spieler zu `disconnected_players` hinzugefügt und `pause_timestamp` gesetzt
+       - Automatische Pause bei Disconnect, Wiederaufnahme bei Reconnect durch Zurücksetzen von `pause_timestamp`
        - Spieler können via Token nahtlos zu unterbrochenen Spielen zurückkehren
-       - Timeout-basierter Spiel-Abbruch bei längerer Inaktivität
+       - Timeout-basierter Spiel-Abbruch bei längerer Inaktivität basierend auf `pause_timestamp`
 
 8. **Modulare Architektur & Erweiterbarkeit**
 
@@ -283,7 +285,7 @@ Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte
      - **SubGrid-Dataclass**: Enthält `id` (str), `cells` (Dict[str, Cell]), `shape_definition` (Dict), `is_closed` (bool), `properties` (Dict).
      - **GlobalGrid-Dataclass**: Enthält `subgrids` (Dict[str, SubGrid]), `subgrid_connections` (Dict[str, List[str]]), `topology` (str), `active_subgrid_pos` (Optional[str]).
      - **GameEvent-Dataclass**: `type` (str), `player` (Player), `data` (Dict[str, Any]), `timestamp` (datetime).
-     - **GameState-Dataclass**: Zentrale Spielverwaltung mit `global_grid` (GlobalGrid), `current_phase` (str), `active_players` (List[Player]), `phase_data` (Dict), `available_actions` (List[str]), `scores` (Dict[Player, int]), `is_finished` (bool), `disconnected_players` (List[Player]) und `pause_timestamp` (Optional[datetime]).
+     - **GameState-Dataclass**: Zentrale Spielverwaltung mit `global_grid` (GlobalGrid), `current_phase` (str), `active_players` (List[Player]), `phase_data` (Dict), `available_actions` (List[str]), `scores` (Dict[str, int]), `is_finished` (bool), `disconnected_players` (List[Player]), `pause_timestamp` (Optional[datetime]), `active_modes` (Dict[str, Any]) und `last_move` (Optional[Dict]).
      - **GameConfig-Dataclass**: `field_variant` (str), `activation_mode` (str), `scoring_modes` (List[str]), `turn_mode` (str), `win_condition` (str), `special_rules` (List[str]).
      - **Game-Dataclass**: Verwaltet ein einzelnes Spiel mit `game_id` (str), `config` (GameConfig), `game_state` (GameState), `status` (str: "waiting", "ready", "running", "paused", "finished", "aborted"), `created_at` (datetime) und `last_activity` (datetime).
      - **Funktionale Architektur**: 
