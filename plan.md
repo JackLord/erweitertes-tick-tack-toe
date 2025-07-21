@@ -1,6 +1,39 @@
-**Abstrakte Spielbeschreibung**
+**Mo1. **Framework-Konzept**
 
-Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 × 3-Felder zu einem großen Spielfeld verknüpft und daraus einen punktebasierten Wettbewerb macht.
+   * **Modulare Architektur**: Verschiedene Spielkomponenten (Scoring, Aktivierung, Turn-Management, Win-Conditions) sind austauschbar und kombinierbar.
+   * **Graph-basierte Spielfelder**: Unterstützt verschiedene Topologien (rechteckig, hexagonal, custom) durch flexible Nachbarschafts-Definitionen.
+   * **Plugin-System**: Neue Modi können ohne Kern-Änderungen über ein Protocol + Enum Hybrid-System hinzugefügt werden.
+   * **Standard-Konfiguration**: Klassisches erweitertes Tic-Tac-Toe als Default-Setup für einfachen Einstieg.
+   * **Type-Safe Erweiterbarkeit**: Kombiniert Enum-basierte Standard-Modi mit Protocol-basierten Custom-Erweiterungen.
+
+2. **Standard-Spielkonfiguration (Default-Setup)**
+
+   * **Spielfeld**: Konfigurierbare Anzahl von Teilfeldern (Standard: 3×3 Teilfelder, jedes mit 3×3 Zellen).
+   * **Aktivierung**: Teilfelder werden standardmäßig in Spiralreihenfolge freigeschaltet (konfigurierbar).
+   * **Turn-Management**: Spieler setzen entsprechend des gewählten Turn-Modus Züge (Standard: Alternating-Modus).
+   * **Scoring**: Punkte werden nach konfigurierten Scoring-Modi vergeben (Standard: Line-Count für durchgehende Linien).
+   * **Win-Condition**: Spielende und Gewinner werden nach gewählter Win-Condition bestimmt (Standard: Most-Points).
+
+3. **Modulare Spielkomponenten**
+
+   * **Activation-Modi**: 
+     - Spiral (Standard), Player-Choice, Adjacent, Random, Capture, Time-Based
+     - Bestimmen, welche Teilfelder wann aktiviert werden
+   * **Scoring-Modi**: 
+     - Line-Count (Standard), Territory, Combo, Pattern, Speed, Risk-Reward
+     - Definieren, wie und wofür Punkte vergeben werden
+   * **Turn-Management**: 
+     - Alternating (Standard), Double-Turn, Auction, Time-Pressure, Simultaneous
+     - Regeln, wer wann ziehen darf
+   * **Win-Conditions**: 
+     - Most-Points (Standard), First-To-X, Elimination, Territory-Control, Pattern-Complete
+     - Bestimmen Spielende und Gewinner
+   * **Field-Topologien**: 
+     - Rectangular (Standard), Hexagonal, Torus, Custom-Graph-Strukturen
+     - Verschiedene Spielfeld-Layouts und Nachbarschafts-Regeln
+   * **Kombinierbarkeit**: Modi können je nach Kompatibilität kombiniert und gewichtet werden.oe Game Framework**
+
+Dieses Browser-basierte Spiele-Framework ermöglicht es, verschiedene erweiterte Tic-Tac-Toe-Varianten zu erstellen und zu spielen. Das System kombiniert klassische Teilfelder zu größeren Spielfeldern und bietet durch modulare Komponenten unendliche Variationsmöglichkeiten in Scoring, Aktivierung, Turn-Management und Win-Conditions.
 
 1. **Aufbau**
 
@@ -20,10 +53,13 @@ Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 
    * Für jede neu entstandene durchgehende Linie von mindestens drei gleichen Symbolen (horizontal, vertikal oder diagonal) erhält der aktuelle Spieler **einen Punkt**.
    * Mehrere Linien in einem Zug bringen entsprechend mehrere Punkte.
 
-4. **Spielende und Wertung**
+4. **Framework-Flexibilität & Beispiel-Konfigurationen**
 
-   * Wenn alle Teilfelder voll sind, endet das Spiel.
-   * Es gewinnt, wer die meisten Punkte gesammelt hat; gleiche Punktzahl führt zu einem Unentschieden.
+   * **Standard-Spiel**: Spiral + Line-Count + Alternating + Most-Points
+   * **Strategisches Spiel**: Player-Choice + Territory + Alternating + First-To-50
+   * **Schnelles Spiel**: Random + Speed-Bonus + Time-Pressure + First-To-20
+   * **Experimentelles Spiel**: Simultaneous + Pattern + Double-Turn + Pattern-Complete
+   * **Custom-Kombinationen**: Benutzer können eigene Konfigurationen erstellen und teilen
 
 5. **Benutzeroberfläche & Effekte**
 
@@ -34,10 +70,10 @@ Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 
      - Aus der Lobby kann man zurück zum Startmenü, um den Spielernamen zu ändern.
      - Token werden im localStorage des Browsers gespeichert.
    * **Lobby**: Übersicht aller verfügbaren Spiele mit deren Status (wartend, laufend, voll). Möglichkeit zum Erstellen neuer Spiele oder Beitreten zu bestehenden.
-   * **Spiel-Erstellungsscreen**: Konfiguration der Spielparameter (Feldgröße, Spielername, eigenes Symbol, Spielmodus-Komponenten).
+   * **Spiel-Erstellungsscreen**: Konfiguration der Spielparameter (Field-Topologie, Activation-Mode, Scoring-Modi, Turn-Management, Win-Condition, Spielername, Symbol).
    * **Bereitschaftssystem**: Spieler können signalisieren, dass sie bereit sind zu starten. Das Spiel beginnt erst, wenn beide Spieler bereit sind.
-   * Visuelles Highlighting und ein auffälliger **Partikeleffekt** unterstreichen jede Linie – je länger die Linie, desto stärker der Effekt.
-   * Anzeige von aktuellem Spieler, Punktestand und Fortschritt durch die Teilfelder.
+   * Visuelles Highlighting und ein auffälliger **Partikeleffekt** unterstreichen jede bewertete Aktion – Art und Stärke des Effekts abhängig vom aktiven Scoring-Modus.
+   * Anzeige von aktuellem Spieler, Punktestand, aktiven Modi und Spielfortschritt.
 
 6. **Technische Designanforderungen**
 
@@ -58,11 +94,12 @@ Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 
      - HTML-Seiten für Startmenü, Lobby, Spiel-Erstellung und Spielbrett mit Canvas-Element.
      - JavaScript für die Websocket-Kommunikation, Session-Management (localStorage), Lobby-Verwaltung und Darstellung des Spielfelds.
      - CSS für die Anpassung des Layouts und die Skalierung des Canvas.
-     - Das Spielfeld wird in einem Canvas-Element dargestellt, das sich an die Bildschirmgröße anpasst und immer quadratisch bleibt.
+     - **Canvas-Rendering**: Adaptives Rendering-System für verschiedene Spielfeld-Topologien und Graph-Strukturen.
+     - **Responsive Design**: Automatische Anpassung an verschiedene Bildschirmgrößen und Spielfeld-Formen.
      - Das Frontend dient ausschließlich der visuellen Darstellung und Interaktion.
-   * **Canvas-Skalierung**:
-     - Das Canvas passt sich dynamisch an die verfügbare Breite und Höhe des Bildschirms an.
-     - Elemente im Canvas skalieren proportional, um Verzerrungen zu vermeiden.
+   * **Canvas-Flexibilität**:
+     - Das Canvas-System passt sich dynamisch an verschiedene Topologien an (rechteckig, hexagonal, custom).
+     - Elemente skalieren proportional basierend auf der gewählten Spielfeld-Struktur.
 
 7. **Kommunikation zwischen Client und Server**
 
@@ -76,7 +113,7 @@ Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 
        - `{ "action": "register_player", "player_name": "Alice" }`
        - `{ "action": "validate_token", "token": "abc123xyz" }`
        - `{ "action": "update_player_name", "token": "abc123xyz", "new_name": "Alice2" }`
-       - `{ "action": "create_game", "token": "abc123xyz", "game_config": {"field_variant": "3x3_grid", "activation_mode": "spiral", "scoring_modes": ["line_count"], "symbol": "X"} }`
+       - `{ "action": "create_game", "token": "abc123xyz", "game_config": {"field_variant": "rectangular_3x3", "activation_mode": "spiral", "scoring_modes": ["line_count"], "turn_mode": "alternating", "win_condition": "most_points", "symbol": "X"} }`
        - `{ "action": "join_game", "token": "abc123xyz", "game_id": "abc123", "symbol": "O" }`
        - `{ "action": "ready", "token": "abc123xyz", "game_id": "abc123" }`
        - `{ "action": "move", "token": "abc123xyz", "game_id": "abc123", "position": [1, 2] }`
@@ -88,7 +125,7 @@ Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 
        - `{ "type": "game_joined", "game_id": "abc123", "players": [...] }`
        - `{ "type": "player_ready", "player": "Alice", "all_ready": false }`
        - `{ "type": "game_started", "game_state": {...} }`
-       - `{ "type": "game_update", "grid": [...], "scores": {"Alice": 3, "Bob": 2} }`
+       - `{ "type": "game_update", "grid": [...], "scores": {"Alice": 3, "Bob": 2}, "active_modes": {"scoring": ["line_count"], "activation": "spiral"}, "game_phase": "playing" }`
 
 8. **Modulare Architektur & Erweiterbarkeit**
 
@@ -190,8 +227,8 @@ Dieses Browser-Spiel ist eine erweiterte Tic-Tac-Toe-Variante, die klassische 3 
    * Entwicklung des Bereitschaftssystems für Spieler.
    * Erstellung der Frontend-Screens mit localStorage-Integration für Token-Verwaltung.
    * Implementierung der raum-basierten Websocket-Kommunikation.
-   * Entwicklung der Canvas-basierten Spielfeld-Darstellung mit dynamischer Skalierung für verschiedene Topologien.
+   * Entwicklung der Canvas-basierten Spielfeld-Darstellung mit dynamischer Skalierung für verschiedene Topologien und Graph-Strukturen.
    * Implementierung der serverseitigen Logik für die Validierung und Abwicklung von Spielzügen über reine Funktionen.
    * Entwicklung eines Konfigurations-Validators für Spielmodus-Kompatibilität.
 
-Kurz gesagt kombiniert das Spiel den strategischen Kern von Tic-Tac-Toe mit einer Sequenz aus mehreren Brettern, einem globalen Punktesystem und dynamischen Effekten, wodurch eine längere, taktisch reichere Partie entsteht.
+Kurz gesagt kombiniert das Framework den strategischen Kern von Tic-Tac-Toe mit modularen Spielkomponenten, graph-basierten Spielfeldern und einem flexiblen Plugin-System, wodurch unendlich viele Spielvarianten ermöglicht werden – von einfachen erweiterten Tic-Tac-Toe-Spielen bis hin zu komplexen strategischen Brettspielen.
